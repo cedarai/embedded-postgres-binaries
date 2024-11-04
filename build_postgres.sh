@@ -1,115 +1,164 @@
 #!/bin/bash
 set -ex
 
-ARCH_NAME=amd64
+# Dependency versions for PostGIS and PostgreSQL
+PROJ_VERSION=8.2.1
+GEOS_VERSION=3.8.3
+GDAL_VERSION=3.4.3
 POSTGIS_VERSION=
 PGROUTING_VERSION=
-PLATFORM_NAME=
+LITE_OPT=false
 
-while getopts "v:p:a:g:r:" opt; do
+# Parse options
+while getopts "v:g:r:l" opt; do
     case $opt in
     v) PG_VERSION=$OPTARG ;;
-    p) PLATFORM_NAME=$OPTARG ;;
-    a) ARCH_NAME=$OPTARG ;;
     g) POSTGIS_VERSION=$OPTARG ;;
     r) PGROUTING_VERSION=$OPTARG ;;
+    l) LITE_OPT=true ;;
     \?) exit 1 ;;
     esac
 done
 
-if [ -z "$PG_VERSION" ]; then
-  echo "Postgres version parameter is required!" && exit 1;
+if [ -z "$PG_VERSION" ] ; then
+  echo "PostgreSQL version parameter is required!" && exit 1;
 fi
-if [ "$PLATFORM_NAME" != "darwin" ] && [ "$PLATFORM_NAME" != "windows" ] && [ "$PLATFORM_NAME" != "linux" ]; then
-  echo "Platform $PLATFORM_NAME is not supported!" && exit 1;
-fi
-if [ "$ARCH_NAME" != "amd64" ] && [ "$ARCH_NAME" != "i386" ] && [ "$ARCH_NAME" != "arm64v8" ]; then
-  echo "Architecture $ARCH_NAME is not supported!" && exit 1;
-fi
-if [ "$PLATFORM_NAME" = "darwin" ] && [ "$ARCH_NAME" = "i386" ]; then
-  echo "Darwin platform supports only amd64 or arm64v8 architecture!" && exit 1;
+if echo "$PG_VERSION" | grep -q '^9\.' && [ "$LITE_OPT" = true ] ; then
+  echo "Lite option is supported only for PostgreSQL 10 or later!" && exit 1;
 fi
 
-# Define filenames and directories
-FILE_NAME="postgresql-$PG_VERSION-1"
-if [ "$PLATFORM_NAME" = "darwin" ]; then
-  FILE_NAME="$FILE_NAME-osx"
-else
-  FILE_NAME="$FILE_NAME-$PLATFORM_NAME"
-fi
+ICU_ENABLED=$(echo "$PG_VERSION" | grep -qv '^9\.' && [ "$LITE_OPT" != true ] && echo true || echo false)
 
-if [ "$ARCH_NAME" = "amd64" ] && [ "$PLATFORM_NAME" != "darwin" ]; then
-  FILE_NAME="$FILE_NAME-x64-binaries"
-else
-  FILE_NAME="$FILE_NAME-binaries"
-fi
-
-if [ "$PLATFORM_NAME" = "linux" ]; then
-  FILE_NAME="$FILE_NAME.tar.gz"
-else
-  FILE_NAME="$FILE_NAME.zip"
-fi
-
-DIST_DIR=$PWD/dist
-PKG_DIR=$PWD/package
+# Directories
 TRG_DIR=$PWD/bundle
-DIST_FILE=$DIST_DIR/$FILE_NAME
-POSTGRES_DIR=$PKG_DIR/pgsql
+SRC_DIR=$PWD/src
+INSTALL_DIR=$PWD/pg-build
+mkdir -p $TRG_DIR $SRC_DIR $INSTALL_DIR
 
-mkdir -p $DIST_DIR $TRG_DIR
-
-[ -e $DIST_FILE ] || wget -O $DIST_FILE "https://get.enterprisedb.com/postgresql/$FILE_NAME"
-
-rm -rf $PKG_DIR && mkdir -p $PKG_DIR
-
-if [ "$PLATFORM_NAME" = "linux" ]; then
-  tar -xzf $DIST_FILE -C $PKG_DIR
-else
-  unzip -q -d $PKG_DIR $DIST_FILE
-fi
-
-# Set up environment paths for PostGIS and pgRouting build
-export PATH="$POSTGRES_DIR/bin:$PATH"
-export PG_CONFIG="$POSTGRES_DIR/bin/pg_config"
-export LD_LIBRARY_PATH="$POSTGRES_DIR/lib:$LD_LIBRARY_PATH"
-
-# Install required dependencies for building PostGIS and pgRouting
+# Install Homebrew dependencies
 brew update
-brew install pkg-config proj geos gdal
+brew install pkg-config icu4c libxml2 libxslt openssl@3 zlib perl python3 patchelf curl cmake
 
-# Compile and install PostGIS if a version is specified
+# Dynamically set environment variables for Homebrew dependencies using brew --prefix
+export PATH="$(brew --prefix icu4c)/bin:$(brew --prefix icu4c)/sbin:$(brew --prefix python3)/bin:$(brew --prefix pcre)/bin:$PATH"
+export LDFLAGS="-L$(brew --prefix icu4c)/lib -L$(brew --prefix openssl@3)/lib -L$(brew --prefix pcre)/lib -L$INSTALL_DIR/lib"
+export CPPFLAGS="-I$(brew --prefix icu4c)/include -I$(brew --prefix openssl@3)/include -I$(brew --prefix pcre)/include -I$INSTALL_DIR/include"
+export PKG_CONFIG_PATH="$(brew --prefix icu4c)/lib/pkgconfig:$(brew --prefix openssl@3)/lib/pkgconfig:$INSTALL_DIR/lib/pkgconfig"
+
+# Set Python path dynamically
+PYTHON_PATH="$(brew --prefix python3)/bin/python3"
+
+# Additional ICU-specific environment variables
+export ICU_CFLAGS="-I$(brew --prefix icu4c)/include"
+export ICU_LIBS="-L$(brew --prefix icu4c)/lib -licuuc -licudata -licui18n"
+
+# Helper function to configure static linking
+build_with_static_linking() {
+    ./configure --disable-static --prefix=$INSTALL_DIR "$@"
+}
+
+# Build proj
+wget -O proj.tar.gz "https://download.osgeo.org/proj/proj-$PROJ_VERSION.tar.gz"
+mkdir -p $SRC_DIR/proj
+tar -xf proj.tar.gz -C $SRC_DIR/proj --strip-components 1
+cd $SRC_DIR/proj
+build_with_static_linking
+make -j$(sysctl -n hw.ncpu)
+make install
+
+# Build GEOS (apply workaround for WKBWriter error)
+wget -O geos.tar.bz2 "https://download.osgeo.org/geos/geos-$GEOS_VERSION.tar.bz2"
+mkdir -p $SRC_DIR/geos
+tar -xf geos.tar.bz2 -C $SRC_DIR/geos --strip-components 1
+cd $SRC_DIR/geos
+
+# Correct function name inconsistencies in WKBWriter.cpp
+sed -i '' 's/WriteCoordinateSequence/writeCoordinateSequence/g' src/io/WKBWriter.cpp
+sed -i '' 's/WriteCoordinate/writeCoordinate/g' src/io/WKBWriter.cpp
+
+# Include necessary headers in WKBWriter.h
+sed -i '' '1i\
+#include <cstddef>
+' include/geos/io/WKBWriter.h
+
+build_with_static_linking
+make -j$(sysctl -n hw.ncpu)
+make install
+
+# Build GDAL
+wget -O gdal.tar.xz "https://download.osgeo.org/gdal/$GDAL_VERSION/gdal-$GDAL_VERSION.tar.xz"
+mkdir -p $SRC_DIR/gdal
+tar -xf gdal.tar.xz -C $SRC_DIR/gdal --strip-components 1
+cd $SRC_DIR/gdal
+build_with_static_linking --with-proj=$INSTALL_DIR --without-hdf5
+make -j$(sysctl -n hw.ncpu)
+make install
+
+# Build PostgreSQL with local proj, geos, and gdal
+wget -O postgresql.tar.bz2 "https://ftp.postgresql.org/pub/source/v$PG_VERSION/postgresql-$PG_VERSION.tar.bz2"
+mkdir -p $SRC_DIR/postgresql
+tar -xf postgresql.tar.bz2 -C $SRC_DIR/postgresql --strip-components 1
+cd $SRC_DIR/postgresql
+./configure \
+    CFLAGS="-Os" \
+    PYTHON="$PYTHON_PATH" \
+    --prefix=$INSTALL_DIR \
+    --enable-integer-datetimes \
+    --enable-thread-safety \
+    --with-uuid=e2fs \
+    --with-includes="$INSTALL_DIR/include" \
+    --with-libraries="$INSTALL_DIR/lib" \
+    $([ "$ICU_ENABLED" = true ] && echo "--with-icu") \
+    --with-libxml \
+    --with-libxslt \
+    --with-openssl \
+    --with-perl \
+    --with-python \
+    --with-tcl \
+    --without-readline
+make -j$(sysctl -n hw.ncpu) world
+make install-world
+
+# Build PostGIS with locally built proj, geos, and gdal
 if [ -n "$POSTGIS_VERSION" ]; then
     wget -O postgis.tar.gz "https://download.osgeo.org/postgis/source/postgis-$POSTGIS_VERSION.tar.gz"
-    mkdir -p $PKG_DIR/postgis
-    tar -xf postgis.tar.gz -C $PKG_DIR/postgis --strip-components 1
-    cd $PKG_DIR/postgis
+    mkdir -p $SRC_DIR/postgis
+    tar -xf postgis.tar.gz -C $SRC_DIR/postgis --strip-components 1
+    cd $SRC_DIR/postgis
     ./configure \
-        --with-pgconfig="$PG_CONFIG" \
-        --with-geosconfig=$(brew --prefix geos)/bin/geos-config \
-        --with-projdir=$(brew --prefix proj) \
-        --with-gdalconfig=$(brew --prefix gdal)/bin/gdal-config
+        --prefix=$INSTALL_DIR \
+        --with-pgconfig=$INSTALL_DIR/bin/pg_config \
+        --with-geosconfig=$INSTALL_DIR/bin/geos-config \
+        --with-projdir=$INSTALL_DIR \
+        --with-gdalconfig=$INSTALL_DIR/bin/gdal-config \
+        --without-protobuf
     make -j$(sysctl -n hw.ncpu)
     make install
 fi
 
-# Compile and install pgRouting if a version is specified
+# Build pgRouting if specified
 if [ -n "$PGROUTING_VERSION" ]; then
     wget -O pgrouting.tar.gz "https://github.com/pgRouting/pgrouting/archive/v$PGROUTING_VERSION.tar.gz"
-    mkdir -p $PKG_DIR/pgrouting
-    tar -xf pgrouting.tar.gz -C $PKG_DIR/pgrouting --strip-components 1
-    cd $PKG_DIR/pgrouting
-    mkdir build
+    mkdir -p $SRC_DIR/pgrouting
+    tar -xf pgrouting.tar.gz -C $SRC_DIR/pgrouting --strip-components 1
+    cd $SRC_DIR/pgrouting
+    mkdir -p build
     cd build
-    cmake -DWITH_DOC=OFF -DCMAKE_INSTALL_PREFIX="$POSTGRES_DIR" -DPOSTGRESQL_PGCONFIG="$PG_CONFIG" ..
+    cmake -DWITH_DOC=OFF -DCMAKE_INSTALL_PREFIX=$INSTALL_DIR ..
     make -j$(sysctl -n hw.ncpu)
     make install
 fi
 
-# Bundle the PostgreSQL directory with PostGIS and pgRouting extensions
-if [ "$PLATFORM_NAME" = "darwin" ]; then
-  tar -cJvf $TRG_DIR/postgres-darwin-$ARCH_NAME.txz -C $POSTGRES_DIR .
-elif [ "$PLATFORM_NAME" = "linux" ]; then
-  tar -cJvf $TRG_DIR/postgres-linux-$ARCH_NAME.txz -C $POSTGRES_DIR .
-elif [ "$PLATFORM_NAME" = "windows" ]; then
-  zip -r $TRG_DIR/postgres-windows-$ARCH_NAME.zip $POSTGRES_DIR/*
-fi
+# Package the build
+cd $INSTALL_DIR
+tar -cJvf $TRG_DIR/postgres-macos.txz \
+    share/postgresql \
+    lib \
+    bin/initdb \
+    bin/pg_ctl \
+    bin/postgres \
+    bin/pg_dump \
+    bin/pg_dumpall \
+    bin/pg_restore \
+    bin/pg_isready \
+    bin/psql
