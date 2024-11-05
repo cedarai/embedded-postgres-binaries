@@ -15,13 +15,16 @@ jobs:
         pg_version: ["13.14"]
         os: [macos-15-large, macos-15-xlarge]
     runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: scripts
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Build PostgreSQL, PostGIS, and Dependencies
         run: |
-          ./scripts/build-postgres-darwin.sh -v ${{ matrix.pg_version }} -g 3.1.4 -r 3.2.0
+          ./build-postgres-darwin.sh -v ${{ matrix.pg_version }} -g 3.1.4 -r 3.2.0
 
       - name: Prepare Release Assets
         id: prepare_release
@@ -61,7 +64,7 @@ jobs:
           body: |
             SHA256 Checksums:
             ```
-            $(cat release/SHA256SUMS.txt)
+            $(cat scripts/release/SHA256SUMS.txt)
             ```
 
       - name: Upload Release Asset
@@ -70,7 +73,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: release/${{ steps.prepare_release.outputs.FILENAME }}
+          asset_path: scripts/release/${{ steps.prepare_release.outputs.FILENAME }}
           asset_name: ${{ steps.prepare_release.outputs.FILENAME }}
           asset_content_type: application/x-tar
 
