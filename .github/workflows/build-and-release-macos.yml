@@ -46,7 +46,7 @@ jobs:
         id: calculate_sha256
         run: |
           cd release
-          echo "SHA256SUMS=$(shasum -a 256 $FILENAME | awk '{print $1}')" >> $GITHUB_OUTPUT
+          echo "SHA256SUMS=$(shasum -a 256 ${{ steps.build_postgres.outputs.FILENAME }} | awk '{print $1}')" >> $GITHUB_OUTPUT
 
       - name: Get date
         id: get_date
