@@ -15,9 +15,6 @@ jobs:
         pg_version: ["13.14"]
         os: [macos-15-large, macos-15-xlarge]
     runs-on: ${{ matrix.os }}
-    defaults:
-      run:
-        working-directory: scripts
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -42,9 +39,10 @@ jobs:
           cp bundle/postgres-macos.txz "release/$FILENAME"
 
       - name: Calculate SHA256 Checksums
+        id: calculate_sha256
         run: |
           cd release
-          shasum -a 256 $FILENAME > SHA256SUMS.txt
+          echo "SHA256SUMS=$(shasum -a 256 $FILENAME | awk '{print $1}')" >> $GITHUB_OUTPUT
 
       - name: Get date
         id: get_date
@@ -64,7 +62,7 @@ jobs:
           body: |
             SHA256 Checksums:
             ```
-            $(cat scripts/release/SHA256SUMS.txt)
+            ${{ steps.calculate_sha256.outputs.SHA256SUMS }}
             ```
 
       - name: Upload Release Asset
@@ -73,7 +71,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: scripts/release/${{ steps.prepare_release.outputs.FILENAME }}
+          asset_path: release/${{ steps.prepare_release.outputs.FILENAME }}
           asset_name: ${{ steps.prepare_release.outputs.FILENAME }}
           asset_content_type: application/x-tar
 
