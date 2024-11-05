@@ -24,19 +24,29 @@ jobs:
           ./scripts/build-postgres-darwin.sh -v ${{ matrix.pg_version }} -g 3.1.4 -r 3.2.0
 
       - name: Prepare Release Assets
+        id: prepare_release
         run: |
           mkdir -p release
           # xlarge is arm64, and large is x86_64
+          # put filename into environment variable
           if [ "${{ matrix.os }}" == "macos-15-xlarge" ]; then
-            cp bundle/postgres-macos.txz "release/postgresql-${{ matrix.pg_version }}-darwin-arm64.txz"
+            echo "ARCH=arm64" >> $GITHUB_OUTPUT
+            echo "FILENAME=postgresql-${{ matrix.pg_version }}-darwin-arm64.txz" >> $GITHUB_OUTPUT
           else
-            cp bundle/postgres-macos.txz "release/postgresql-${{ matrix.pg_version }}-darwin-amd64.txz"
+            echo "ARCH=amd64" >> $GITHUB_OUTPUT
+            echo "FILENAME=postgresql-${{ matrix.pg_version }}-darwin-amd64.txz" >> $GITHUB_OUTPUT
           fi
+          cp bundle/postgres-macos.txz "release/$FILENAME"
 
       - name: Calculate SHA256 Checksums
         run: |
           cd release
-          shasum -a 256 postgresql-${{ matrix.pg_version }}-macos.txz > SHA256SUMS.txt
+          shasum -a 256 $FILENAME > SHA256SUMS.txt
+
+      - name: Get date
+        id: get_date
+        run: |
+          echo "DATE=$(date +%Y%m%d)" >> $GITHUB_OUTPUT
 
       - name: Create GitHub Release
         id: create_release
@@ -44,8 +54,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: "v${{ matrix.pg_version }}-$(date +%Y%m%d)"
-          release_name: "PostgreSQL ${{ matrix.pg_version }} with PostGIS 3.4.0 and pgRouting 3.4.2"
+          tag_name: "v${{ matrix.pg_version }}-macos-${{ steps.prepare_release.outputs.ARCH }}-${{ steps.get_date.outputs.DATE }}"
+          release_name: "${{ matrix.pg_version }}-macos-${{ steps.prepare_release.outputs.ARCH }}-${{ steps.get_date.outputs.DATE }}"
           draft: false
           prerelease: false
           body: |
@@ -60,7 +70,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: release/postgresql-${{ matrix.pg_version }}-macos.txz
-          asset_name: postgresql-${{ matrix.pg_version }}-macos.txz
+          asset_path: release/${{ steps.prepare_release.outputs.FILENAME }}
+          asset_name: ${{ steps.prepare_release.outputs.FILENAME }}
           asset_content_type: application/x-tar
 

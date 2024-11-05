@@ -169,7 +169,7 @@ for binary in "${binaries_to_check[@]}"; do
     if [ -f "$binary_path" ]; then
         otool -L "$binary_path" | awk '{print $1}' | grep -E '/opt/homebrew|/usr/local|@executable_path' | while read dep; do
             # Copy the dependency to the lib folder if it’s not already there
-            cp -L "$dep" "$INSTALL_DIR/lib/" 2>/dev/null || true
+            cp -Lf "$dep" "$INSTALL_DIR/lib/" 2>/dev/null || true
             install_name_tool -change "$dep" "@executable_path/../lib/$(basename "$dep")" "$binary_path"
             
             # Create version-agnostic symlinks
@@ -188,7 +188,7 @@ icu_libs=("libicudata.76.dylib" "libicuuc.76.dylib" "libicui18n.76.dylib")
 
 for icu_lib in "${icu_libs[@]}"; do
     # Copy each ICU library to the bundle's lib directory
-    cp -L "$(brew --prefix icu4c)/lib/$icu_lib" "$INSTALL_DIR/lib/"
+    cp -Lf "$(brew --prefix icu4c)/lib/$icu_lib" "$INSTALL_DIR/lib/"
 
     # Adjust internal paths to use @loader_path
     install_name_tool -id "@executable_path/../lib/$icu_lib" "$INSTALL_DIR/lib/$icu_lib"
@@ -202,7 +202,7 @@ for dylib in $INSTALL_DIR/lib/*.dylib; do
     install_name_tool -id "@executable_path/../lib/$(basename "$dylib")" "$dylib"
     otool -L "$dylib" | awk '{print $1}' | grep -E '/opt/homebrew|/usr/local|@executable_path' | while read dep; do
         # Ensure the library is copied to the lib folder if it’s not already there
-        cp -L "$dep" "$INSTALL_DIR/lib/" 2>/dev/null || true
+        cp -Lf "$dep" "$INSTALL_DIR/lib/" 2>/dev/null || true
         install_name_tool -change "$dep" "@executable_path/../lib/$(basename "$dep")" "$dylib"
         
         # Create version-agnostic symlinks
