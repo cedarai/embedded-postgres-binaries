@@ -15,19 +15,7 @@ jobs:
   build-and-release:
     strategy:
       matrix:
-        include:
-          - pg_version: "13.15"
-            postgis_version: "3.4.2"
-            pgrouting_version: "3.6.2"
-          - pg_version: "14.12"
-            postgis_version: "3.4.2"
-            pgrouting_version: "3.6.2"
-          - pg_version: "15.7"
-            postgis_version: "3.4.2"
-            pgrouting_version: "3.6.2"
-          - pg_version: "16.3"
-            postgis_version: "3.4.2"
-            pgrouting_version: "3.6.2"
+        pg_version: ["13.15", "14.12", "15.7", "16.3"]
         os: [macos-15-large, macos-15-xlarge]
     runs-on: ${{ matrix.os }}
     defaults:
@@ -40,7 +28,7 @@ jobs:
       - name: Build PostgreSQL, PostGIS, and Dependencies
         id: build_postgres
         run: |
-          ./build-postgres-darwin.sh -v ${{ matrix.pg_version }} -g ${{ matrix.postgis_version }} -r ${{ matrix.pgrouting_version }}
+          ./build-postgres-darwin.sh -v ${{ matrix.pg_version }} -g 3.4.2 -r 3.6.2
           if [ "${{ matrix.os }}" == "macos-15-xlarge" ]; then
             echo "ARCH=arm64" >> $GITHUB_OUTPUT
             echo "FILENAME=postgresql-${{ matrix.pg_version }}-darwin-arm64.txz" >> $GITHUB_OUTPUT
