@@ -37,12 +37,12 @@ mkdir -p $TRG_DIR $SRC_DIR $INSTALL_DIR
 
 # Install Homebrew dependencies
 brew update
-brew install pkg-config icu4c libxml2 libxslt openssl@3 zlib perl python3 patchelf curl cmake pcre boost
+brew install pkg-config icu4c libxml2 libxslt openssl@3 zlib perl python3 patchelf curl cmake pcre boost gettext
 
 # Dynamically set environment variables for Homebrew dependencies using brew --prefix
-export PATH="$(brew --prefix icu4c)/bin:$(brew --prefix icu4c)/sbin:$(brew --prefix python3)/bin:$(brew --prefix pcre)/bin:$PATH"
-export LDFLAGS="-L$(brew --prefix icu4c)/lib -L$(brew --prefix openssl@3)/lib -L$(brew --prefix pcre)/lib -L$(brew --prefix boost)/lib -L$INSTALL_DIR/lib"
-export CPPFLAGS="-I$(brew --prefix icu4c)/include -I$(brew --prefix openssl@3)/include -I$(brew --prefix pcre)/include -I$(brew --prefix boost)/include -I$INSTALL_DIR/include"
+export PATH="$(brew --prefix icu4c)/bin:$(brew --prefix icu4c)/sbin:$(brew --prefix python3)/bin:$(brew --prefix pcre)/bin:$(brew --prefix gettext)/bin:$PATH"
+export LDFLAGS="-L$(brew --prefix icu4c)/lib -L$(brew --prefix openssl@3)/lib -L$(brew --prefix pcre)/lib -L$(brew --prefix boost)/lib -L$(brew --prefix gettext)/lib -L$INSTALL_DIR/lib"
+export CPPFLAGS="-I$(brew --prefix icu4c)/include -I$(brew --prefix openssl@3)/include -I$(brew --prefix pcre)/include -I$(brew --prefix boost)/include -I$(brew --prefix gettext)/include -I$INSTALL_DIR/include"
 export PKG_CONFIG_PATH="$(brew --prefix icu4c)/lib/pkgconfig:$(brew --prefix openssl@3)/lib/pkgconfig:$INSTALL_DIR/lib/pkgconfig"
 
 # Set Python path dynamically
