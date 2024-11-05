@@ -15,6 +15,9 @@ jobs:
         pg_version: ["13.14"]
         os: [macos-15-large, macos-15-xlarge]
     runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: scripts
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
