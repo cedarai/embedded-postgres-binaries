@@ -1,5 +1,9 @@
 name: Build and Release PostgreSQL with PostGIS and pgRouting
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 on:
   push:
     branches:
