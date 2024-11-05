@@ -149,29 +149,58 @@ if [ -n "$PGROUTING_VERSION" ]; then
     make install
 fi
 
-# Copy and update paths for required libraries using otool and install_name_tool
-for binary in $INSTALL_DIR/bin/*; do
-    otool -L "$binary" | awk '{print $1}' | grep -E '/opt/homebrew|/usr/local|/usr/lib|@executable_path' | while read dep; do
-        # Copy the dependency to the lib folder if it’s not already there
-        cp -L "$dep" "$INSTALL_DIR/lib/" 2>/dev/null || true
-        install_name_tool -change "$dep" "@executable_path/../lib/$(basename "$dep")" "$binary"
-        
-        # Create version-agnostic symlinks
-        base_name=$(basename "$dep")
-        symlink_name=$(echo "$base_name" | sed -E 's/([._][0-9]+)+\.dylib$/.dylib/')  # e.g., libcrypto.3.dylib -> libcrypto.dylib
+# Define the specific binaries to check
+binaries_to_check=(
+    "bin/initdb"
+    "bin/pg_ctl"
+    "bin/postgres"
+    "bin/pg_dump"
+    "bin/pg_dumpall"
+    "bin/pg_restore"
+    "bin/pg_isready"
+    "bin/psql"
+)
 
-        if [ "$symlink_name" != "$base_name" ]; then
-            ln -sf "$base_name" "$INSTALL_DIR/lib/$symlink_name"
-        fi
+# Loop through each specified binary to update library paths
+for binary in "${binaries_to_check[@]}"; do
+    binary_path="$INSTALL_DIR/$binary"
+
+    # Only process if the binary exists
+    if [ -f "$binary_path" ]; then
+        otool -L "$binary_path" | awk '{print $1}' | grep -E '/opt/homebrew|/usr/local|@executable_path' | while read dep; do
+            # Copy the dependency to the lib folder if it’s not already there
+            cp -L "$dep" "$INSTALL_DIR/lib/" 2>/dev/null || true
+            install_name_tool -change "$dep" "@executable_path/../lib/$(basename "$dep")" "$binary_path"
+            
+            # Create version-agnostic symlinks
+            base_name=$(basename "$dep")
+            symlink_name=$(echo "$base_name" | sed -E 's/([._][0-9]+)+\.dylib$/.dylib/')  # e.g., libcrypto.3.dylib -> libcrypto.dylib
+
+            if [ "$symlink_name" != "$base_name" ]; then
+                ln -sf "$base_name" "$INSTALL_DIR/lib/$symlink_name"
+            fi
+        done
+    fi
+done
+
+# Copy ICU dependencies and update paths
+icu_libs=("libicudata.76.dylib" "libicuuc.76.dylib" "libicui18n.76.dylib")
+
+for icu_lib in "${icu_libs[@]}"; do
+    # Copy each ICU library to the bundle's lib directory
+    cp -L "$(brew --prefix icu4c)/lib/$icu_lib" "$INSTALL_DIR/lib/"
+
+    # Adjust internal paths to use @loader_path
+    install_name_tool -id "@executable_path/../lib/$icu_lib" "$INSTALL_DIR/lib/$icu_lib"
+    otool -L "$INSTALL_DIR/lib/$icu_lib" | awk '{print $1}' | grep "@loader_path" | while read dep; do
+        install_name_tool -change "$dep" "@loader_path/$(basename "$dep")" "$INSTALL_DIR/lib/$icu_lib"
     done
-    # Re-sign the binary after modifying paths
-    codesign --force --sign - "$binary"
 done
 
 # Update library paths within each .dylib in the lib directory
 for dylib in $INSTALL_DIR/lib/*.dylib; do
     install_name_tool -id "@executable_path/../lib/$(basename "$dylib")" "$dylib"
-    otool -L "$dylib" | awk '{print $1}' | grep -E '/opt/homebrew|/usr/local|/usr/lib|@executable_path' | while read dep; do
+    otool -L "$dylib" | awk '{print $1}' | grep -E '/opt/homebrew|/usr/local|@executable_path' | while read dep; do
         # Ensure the library is copied to the lib folder if it’s not already there
         cp -L "$dep" "$INSTALL_DIR/lib/" 2>/dev/null || true
         install_name_tool -change "$dep" "@executable_path/../lib/$(basename "$dep")" "$dylib"
