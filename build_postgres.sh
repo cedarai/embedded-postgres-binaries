@@ -149,6 +149,45 @@ if [ -n "$PGROUTING_VERSION" ]; then
     make install
 fi
 
+# Copy and update paths for required libraries using otool and install_name_tool
+for binary in $INSTALL_DIR/bin/*; do
+    otool -L "$binary" | awk '{print $1}' | grep -E '/opt/homebrew|/usr/local|/usr/lib|@executable_path' | while read dep; do
+        # Copy the dependency to the lib folder if it’s not already there
+        cp -L "$dep" "$INSTALL_DIR/lib/" 2>/dev/null || true
+        install_name_tool -change "$dep" "@executable_path/../lib/$(basename "$dep")" "$binary"
+        
+        # Create version-agnostic symlinks
+        base_name=$(basename "$dep")
+        symlink_name=$(echo "$base_name" | sed -E 's/([._][0-9]+)+\.dylib$/.dylib/')  # e.g., libcrypto.3.dylib -> libcrypto.dylib
+
+        if [ "$symlink_name" != "$base_name" ]; then
+            ln -sf "$base_name" "$INSTALL_DIR/lib/$symlink_name"
+        fi
+    done
+    # Re-sign the binary after modifying paths
+    codesign --force --sign - "$binary"
+done
+
+# Update library paths within each .dylib in the lib directory
+for dylib in $INSTALL_DIR/lib/*.dylib; do
+    install_name_tool -id "@executable_path/../lib/$(basename "$dylib")" "$dylib"
+    otool -L "$dylib" | awk '{print $1}' | grep -E '/opt/homebrew|/usr/local|/usr/lib|@executable_path' | while read dep; do
+        # Ensure the library is copied to the lib folder if it’s not already there
+        cp -L "$dep" "$INSTALL_DIR/lib/" 2>/dev/null || true
+        install_name_tool -change "$dep" "@executable_path/../lib/$(basename "$dep")" "$dylib"
+        
+        # Create version-agnostic symlinks
+        base_name=$(basename "$dep")
+        symlink_name=$(echo "$base_name" | sed -E 's/([._][0-9]+)+\.dylib$/.dylib/')  # e.g., libcrypto.3.dylib -> libcrypto.dylib
+
+        if [ "$symlink_name" != "$base_name" ]; then
+            ln -sf "$base_name" "$INSTALL_DIR/lib/$symlink_name"
+        fi
+    done
+    # Re-sign the library after modifying paths
+    codesign --force --sign - "$dylib"
+done
+
 # Package the build
 cd $INSTALL_DIR
 tar -cJvf $TRG_DIR/postgres-macos.txz \
