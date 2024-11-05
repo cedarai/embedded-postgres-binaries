@@ -13,7 +13,7 @@ jobs:
       matrix:
         # pg_version: ["13.14", "14.11", "15.6", "16.2"]
         pg_version: ["13.14"]
-        os: [macos-15-large]
+        os: [macos-15-large, macos-15-xlarge]
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout repository
@@ -26,7 +26,12 @@ jobs:
       - name: Prepare Release Assets
         run: |
           mkdir -p release
-          cp bundle/postgres-macos.txz "release/postgresql-${{ matrix.pg_version }}-macos.txz"
+          # xlarge is arm64, and large is x86_64
+          if [ "${{ matrix.os }}" == "macos-15-xlarge" ]; then
+            cp bundle/postgres-macos.txz "release/postgresql-${{ matrix.pg_version }}-darwin-arm64.txz"
+          else
+            cp bundle/postgres-macos.txz "release/postgresql-${{ matrix.pg_version }}-darwin-amd64.txz"
+          fi
 
       - name: Calculate SHA256 Checksums
         run: |
