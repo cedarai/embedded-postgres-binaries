@@ -15,7 +15,8 @@ jobs:
   build-and-release:
     strategy:
       matrix:
-        pg_version: ["13.14", "14.11", "15.6", "16.2"]
+        # pg_version: ["13.14", "14.11", "15.6", "16.2"]
+        pg_version: ["13.14", "14.11"]
         os: [macos-15-large, macos-15-xlarge]
     runs-on: ${{ matrix.os }}
     defaults:
