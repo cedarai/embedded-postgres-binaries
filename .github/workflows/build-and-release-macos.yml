@@ -9,11 +9,12 @@ on:
 
 jobs:
   build-and-release:
-    runs-on: macos-latest
     strategy:
       matrix:
         # pg_version: ["13.14", "14.11", "15.6", "16.2"]
         pg_version: ["13.14"]
+        os: [macos-14, macos-14-arm64]
+    runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
