@@ -219,8 +219,9 @@ done
 
 # Package the build
 cd $INSTALL_DIR
+cp -Rf $(git rev-parse --show-toplevel)/share/postgresql/extension/* share/extension
 tar -cJvf $TRG_DIR/postgres-macos.txz \
-    share/postgresql \
+    share/extension \
     lib \
     bin/initdb \
     bin/pg_ctl \
