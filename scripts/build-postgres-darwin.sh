@@ -248,11 +248,9 @@ zip -r $TRG_DIR/postgres-macos.zip \
     bin/pg_isready \
     bin/psql
 
-
 # Function to sign, notarize, and staple
 sign_and_notarize() {
     local package_path="$1"
-    local bundle_id="${package_path%.*}"
 
     # Unlock the keychain
     security unlock-keychain -p "$KEYCHAIN_PASSWD" ~/Library/Keychains/login.keychain
@@ -287,15 +285,7 @@ sign_and_notarize() {
 
     # Staple the notarization
     echo "Stapling the notarization to $package_path..."
-    if [[ "${package_path##*.}" == "zip" ]]; then
-        # Unzip, staple, and repackage
-        rm -rf "${bundle_id}.app"
-        unzip "$package_path" && rm -f "$package_path"
-        xcrun stapler staple "${bundle_id}.app"
-        ditto -c -k --keepParent "${bundle_id}.app" "$package_path"
-    else
-        xcrun stapler staple "$package_path"
-    fi
+    xcrun stapler staple "$package_path"
 
     if [ $? != 0 ]; then
         echo "ERROR: could not staple $package_path"

@@ -56,16 +56,16 @@ jobs:
           ./build-postgres-darwin.sh -v ${{ matrix.pg_version }} -g 3.4.2 -r 3.6.2
           if [ "${{ matrix.os }}" == "macos-15-xlarge" ]; then
             echo "ARCH=arm64" >> $GITHUB_OUTPUT
-            echo "FILENAME=postgresql-${{ matrix.pg_version }}-darwin-arm64.txz" >> $GITHUB_OUTPUT
+            echo "FILENAME=postgresql-${{ matrix.pg_version }}-darwin-arm64.zip" >> $GITHUB_OUTPUT
           else
             echo "ARCH=amd64" >> $GITHUB_OUTPUT
-            echo "FILENAME=postgresql-${{ matrix.pg_version }}-darwin-amd64.txz" >> $GITHUB_OUTPUT
+            echo "FILENAME=postgresql-${{ matrix.pg_version }}-darwin-amd64.zip" >> $GITHUB_OUTPUT
           fi
 
       - name: Prepare Release Assets
         run: |
           mkdir -p release
-          cp bundle/postgres-macos.txz "release/${{ steps.build_postgres.outputs.FILENAME }}"
+          cp bundle/postgres-macos.zip "release/${{ steps.build_postgres.outputs.FILENAME }}"
 
       - name: Calculate SHA256 Checksums
         id: calculate_sha256
