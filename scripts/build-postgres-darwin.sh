@@ -221,12 +221,20 @@ for dylib in $INSTALL_DIR/lib/*.dylib; do
             ln -sf "$base_name" "$INSTALL_DIR/lib/$symlink_name"
         fi
     done
-    # Re-sign the library after modifying paths
-    sign_binary "$dylib"
+done
+
+# Loop through all .dylib and .so files in the lib folder to sign them
+for lib_file in $INSTALL_DIR/lib/*.{dylib,so}; do
+    # Check if the file exists (to handle cases where there may be no .dylib or .so files)
+    if [ -f "$lib_file" ]; then
+        echo "Signing $lib_file..."
+        sign_binary "$lib_file"
+    fi
 done
 
 # Package the build
 cd $INSTALL_DIR
+rm -f lib/pgxs/src/test/regress/pg_regress
 cp -Rf $(git rev-parse --show-toplevel)/share/postgresql/extension/* share/extension
 zip -r $TRG_DIR/postgres-macos.zip \
     share \
