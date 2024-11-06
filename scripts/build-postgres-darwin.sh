@@ -170,7 +170,7 @@ for binary in "${binaries_to_check[@]}"; do
         otool -L "$binary_path" | awk '{print $1}' | grep -E '/opt/homebrew|/usr/local|@executable_path|'"$INSTALL_DIR" | while read dep; do
             # Copy the dependency to the lib folder if it’s not already there
             cp -Lf "$dep" "$INSTALL_DIR/lib/" 2>/dev/null || true
-            install_name_tool -change "$dep" "@executable_path/../lib/$(basename "$dep")" "$binary_path"
+            install_name_tool -change "$dep" "@loader_path/../lib/$(basename "$dep")" "$binary_path"
             
             # Create version-agnostic symlinks
             base_name=$(basename "$dep")
@@ -192,20 +192,20 @@ for icu_lib in "${icu_libs[@]}"; do
     cp -Lf "$(brew --prefix icu4c)/lib/$icu_lib" "$INSTALL_DIR/lib/"
 
     # Adjust internal paths to use @loader_path
-    install_name_tool -id "@executable_path/../lib/$icu_lib" "$INSTALL_DIR/lib/$icu_lib"
+    install_name_tool -id "@loader_path/../lib/$icu_lib" "$INSTALL_DIR/lib/$icu_lib"
     otool -L "$INSTALL_DIR/lib/$icu_lib" | awk '{print $1}' | grep "@loader_path" | while read dep; do
-        install_name_tool -change "$dep" "@loader_path/$(basename "$dep")" "$INSTALL_DIR/lib/$icu_lib"
+        install_name_tool -change "$dep" "@loader_path/../lib/$(basename "$dep")" "$INSTALL_DIR/lib/$icu_lib"
     done
     # codesign --force --sign - "$INSTALL_DIR/lib/$icu_lib"
 done
 
 # Update library paths within each .dylib in the lib directory
 for dylib in $INSTALL_DIR/lib/*.dylib; do
-    install_name_tool -id "@executable_path/../lib/$(basename "$dylib")" "$dylib"
+    install_name_tool -id "@loader_path/../lib/$(basename "$dylib")" "$dylib"
     otool -L "$dylib" | awk '{print $1}' | grep -E '/opt/homebrew|/usr/local|@executable_path|'"$INSTALL_DIR" | while read dep; do
         # Ensure the library is copied to the lib folder if it’s not already there
         cp -Lf "$dep" "$INSTALL_DIR/lib/" 2>/dev/null || true
-        install_name_tool -change "$dep" "@executable_path/../lib/$(basename "$dep")" "$dylib"
+        install_name_tool -change "$dep" "@loader_path/../lib/$(basename "$dep")" "$dylib"
         
         # Create version-agnostic symlinks
         base_name=$(basename "$dep")
