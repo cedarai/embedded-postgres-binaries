@@ -35,12 +35,15 @@ jobs:
           security create-keychain -p "temp-password" build.keychain
           security import certificate.p12 -k build.keychain -P "${{ secrets.CERTIFICATE_PASSWORD }}" -T /usr/bin/codesign
           
-          # Set the keychain as default
+          # Set the keychain as default and unlock it
           security list-keychains -s build.keychain
           security unlock-keychain -p "temp-password" build.keychain
           
-          # Set keychain settings to prevent it from timing out
+          # Set keychain settings to prevent it from locking automatically
           security set-keychain-settings build.keychain
+          
+          # Pre-authorize codesign to access the certificate
+          security set-key-partition-list -S apple-tool:,apple: -s -k "temp-password" build.keychain
 
           echo "SIGN_IDENTITY=${{ secrets.SIGN_IDENTITY }}" >> $GITHUB_ENV
           echo "APPLE_ID=${{ secrets.APPLE_ID }}" >> $GITHUB_ENV

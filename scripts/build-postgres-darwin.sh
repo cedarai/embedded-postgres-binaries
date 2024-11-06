@@ -60,7 +60,7 @@ build_with_static_linking() {
 # Function to codesign a binary
 sign_binary() {
     local binary_path="$1"
-    codesign --force --options runtime -i 'com.cedarai.postgresql' --sign "$SIGN_IDENTITY" "$binary_path"
+    codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" "$binary_path"
 }
 
 # Build proj
