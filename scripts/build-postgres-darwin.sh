@@ -180,7 +180,7 @@ for binary in "${binaries_to_check[@]}"; do
                 ln -sf "$base_name" "$INSTALL_DIR/lib/$symlink_name"
             fi
         done
-        codesign --force --sign - "$binary_path"
+        # codesign --force --sign - "$binary_path"
     fi
 done
 
@@ -196,7 +196,7 @@ for icu_lib in "${icu_libs[@]}"; do
     otool -L "$INSTALL_DIR/lib/$icu_lib" | awk '{print $1}' | grep "@loader_path" | while read dep; do
         install_name_tool -change "$dep" "@loader_path/$(basename "$dep")" "$INSTALL_DIR/lib/$icu_lib"
     done
-    codesign --force --sign - "$INSTALL_DIR/lib/$icu_lib"
+    # codesign --force --sign - "$INSTALL_DIR/lib/$icu_lib"
 done
 
 # Update library paths within each .dylib in the lib directory
@@ -216,7 +216,7 @@ for dylib in $INSTALL_DIR/lib/*.dylib; do
         fi
     done
     # Re-sign the library after modifying paths
-    codesign --force --sign - "$dylib"
+    # codesign --force --sign - "$dylib"
 done
 
 # Package the build
