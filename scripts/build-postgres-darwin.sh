@@ -240,8 +240,62 @@ zip -r $TRG_DIR/postgres-macos.zip \
     bin/pg_isready \
     bin/psql
 
-# Notarize the zip package
-xcrun notarytool submit $TRG_DIR/postgres-macos.zip --apple-id "$APPLE_ID" --password "$APPLE_APP_SPECIFIC_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
 
-# Staple the notarization ticket to the zip file
-xcrun stapler staple $TRG_DIR/postgres-macos.zip
+# Function to sign, notarize, and staple
+sign_and_notarize() {
+    local package_path="$1"
+    local bundle_id="${package_path%.*}"
+
+    # Unlock the keychain
+    security unlock-keychain -p "$KEYCHAIN_PASSWD" ~/Library/Keychains/login.keychain
+
+    # Submit for notarization
+    STATUS=$(xcrun notarytool submit "$package_path" \
+                              --team-id "$APPLE_TEAM_ID" \
+                              --apple-id "$APPLE_ID" \
+                              --password "$APPLE_APP_SPECIFIC_PASSWORD" 2>&1)
+
+    # Get the submission ID
+    SUBMISSION_ID=$(echo "$STATUS" | awk -F ': ' '/id:/ { print $2; exit; }')
+    echo "Notarization submission ID: $SUBMISSION_ID"
+
+    # Wait for notarization to complete
+    xcrun notarytool wait "$SUBMISSION_ID" \
+                          --team-id "$APPLE_TEAM_ID" \
+                          --apple-id "$APPLE_ID" \
+                          --password "$APPLE_APP_SPECIFIC_PASSWORD"
+
+    # Check the notarization status
+    REQUEST_STATUS=$(xcrun notarytool info "$SUBMISSION_ID" \
+                     --team-id "$APPLE_TEAM_ID" \
+                     --apple-id "$APPLE_ID" \
+                     --password "$APPLE_APP_SPECIFIC_PASSWORD" 2>&1 | \
+                     awk -F ': ' '/status:/ { print $2; }')
+
+    if [[ "$REQUEST_STATUS" != "Accepted" ]]; then
+        echo "Notarization failed."
+        exit 1
+    fi
+
+    # Staple the notarization
+    echo "Stapling the notarization to $package_path..."
+    if [[ "${package_path##*.}" == "zip" ]]; then
+        # Unzip, staple, and repackage
+        rm -rf "${bundle_id}.app"
+        unzip "$package_path" && rm -f "$package_path"
+        xcrun stapler staple "${bundle_id}.app"
+        ditto -c -k --keepParent "${bundle_id}.app" "$package_path"
+    else
+        xcrun stapler staple "$package_path"
+    fi
+
+    if [ $? != 0 ]; then
+        echo "ERROR: could not staple $package_path"
+        exit 1
+    fi
+
+    echo "Notarization completed successfully for $package_path"
+}
+
+# Sign and notarize the zip package
+sign_and_notarize "$TRG_DIR/postgres-macos.zip"
