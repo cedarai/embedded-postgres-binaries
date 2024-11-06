@@ -167,7 +167,7 @@ for binary in "${binaries_to_check[@]}"; do
 
     # Only process if the binary exists
     if [ -f "$binary_path" ]; then
-        otool -L "$binary_path" | awk '{print $1}' | grep -E '/opt/homebrew|/usr/local|@executable_path'"$INSTALL_DIR" | while read dep; do
+        otool -L "$binary_path" | awk '{print $1}' | grep -E '/opt/homebrew|/usr/local|@executable_path|'"$INSTALL_DIR" | while read dep; do
             # Copy the dependency to the lib folder if it’s not already there
             cp -Lf "$dep" "$INSTALL_DIR/lib/" 2>/dev/null || true
             install_name_tool -change "$dep" "@executable_path/../lib/$(basename "$dep")" "$binary_path"
@@ -202,7 +202,7 @@ done
 # Update library paths within each .dylib in the lib directory
 for dylib in $INSTALL_DIR/lib/*.dylib; do
     install_name_tool -id "@executable_path/../lib/$(basename "$dylib")" "$dylib"
-    otool -L "$dylib" | awk '{print $1}' | grep -E '/opt/homebrew|/usr/local|@executable_path'"$INSTALL_DIR" | while read dep; do
+    otool -L "$dylib" | awk '{print $1}' | grep -E '/opt/homebrew|/usr/local|@executable_path|'"$INSTALL_DIR" | while read dep; do
         # Ensure the library is copied to the lib folder if it’s not already there
         cp -Lf "$dep" "$INSTALL_DIR/lib/" 2>/dev/null || true
         install_name_tool -change "$dep" "@executable_path/../lib/$(basename "$dep")" "$dylib"
