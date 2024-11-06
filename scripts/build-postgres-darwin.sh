@@ -167,7 +167,7 @@ for binary in "${binaries_to_check[@]}"; do
 
     # Only process if the binary exists
     if [ -f "$binary_path" ]; then
-        otool -L "$binary_path" | awk '{print $1}' | grep -E '/opt/homebrew|/usr/local|@executable_path' | while read dep; do
+        otool -L "$binary_path" | awk '{print $1}' | grep -E '/opt/homebrew|/usr/local|@executable_path'"$INSTALL_DIR" | while read dep; do
             # Copy the dependency to the lib folder if it’s not already there
             cp -Lf "$dep" "$INSTALL_DIR/lib/" 2>/dev/null || true
             install_name_tool -change "$dep" "@executable_path/../lib/$(basename "$dep")" "$binary_path"
@@ -180,6 +180,7 @@ for binary in "${binaries_to_check[@]}"; do
                 ln -sf "$base_name" "$INSTALL_DIR/lib/$symlink_name"
             fi
         done
+        codesign --force --sign - "$binary_path"
     fi
 done
 
@@ -195,12 +196,13 @@ for icu_lib in "${icu_libs[@]}"; do
     otool -L "$INSTALL_DIR/lib/$icu_lib" | awk '{print $1}' | grep "@loader_path" | while read dep; do
         install_name_tool -change "$dep" "@loader_path/$(basename "$dep")" "$INSTALL_DIR/lib/$icu_lib"
     done
+    codesign --force --sign - "$INSTALL_DIR/lib/$icu_lib"
 done
 
 # Update library paths within each .dylib in the lib directory
 for dylib in $INSTALL_DIR/lib/*.dylib; do
     install_name_tool -id "@executable_path/../lib/$(basename "$dylib")" "$dylib"
-    otool -L "$dylib" | awk '{print $1}' | grep -E '/opt/homebrew|/usr/local|@executable_path' | while read dep; do
+    otool -L "$dylib" | awk '{print $1}' | grep -E '/opt/homebrew|/usr/local|@executable_path'"$INSTALL_DIR" | while read dep; do
         # Ensure the library is copied to the lib folder if it’s not already there
         cp -Lf "$dep" "$INSTALL_DIR/lib/" 2>/dev/null || true
         install_name_tool -change "$dep" "@executable_path/../lib/$(basename "$dep")" "$dylib"
@@ -221,7 +223,7 @@ done
 cd $INSTALL_DIR
 cp -Rf $(git rev-parse --show-toplevel)/share/postgresql/extension/* share/extension
 tar -cJvf $TRG_DIR/postgres-macos.txz \
-    share/extension \
+    share \
     lib \
     bin/initdb \
     bin/pg_ctl \
