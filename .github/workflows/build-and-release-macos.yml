@@ -24,6 +24,27 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+      
+      - name: Decode and import the certificate
+        run: |
+          # Decode the base64-encoded certificate and save it as a .p12 file
+          echo "${{ secrets.CERTIFICATE_P12_BASE64 }}" | base64 --decode > certificate.p12
+          
+          # Import the .p12 certificate into the macOS keychain
+          security create-keychain -p "temp-password" build.keychain
+          security import certificate.p12 -k build.keychain -P "${{ secrets.CERTIFICATE_PASSWORD }}" -T /usr/bin/codesign
+          
+          # Set the keychain as default
+          security list-keychains -s build.keychain
+          security unlock-keychain -p "temp-password" build.keychain
+          
+          # Set keychain settings to prevent it from timing out
+          security set-keychain-settings build.keychain
+
+          echo "SIGN_IDENTITY=${{ secrets.SIGN_IDENTITY }}" >> $GITHUB_ENV
+          echo "APPLE_ID=${{ secrets.APPLE_ID }}" >> $GITHUB_ENV
+          echo "APPLE_APP_SPECIFIC_PASSWORD=${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}" >> $GITHUB_ENV
+          echo "APPLE_TEAM_ID=${{ secrets.APPLE_TEAM_ID }}" >> $GITHUB_ENV
 
       - name: Build PostgreSQL, PostGIS, and Dependencies
         id: build_postgres

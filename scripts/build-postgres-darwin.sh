@@ -57,6 +57,12 @@ build_with_static_linking() {
     ./configure --disable-static --prefix=$INSTALL_DIR "$@"
 }
 
+# Function to codesign a binary
+sign_binary() {
+    local binary_path="$1"
+    codesign --force --options runtime -i 'com.cedarai.postgresql' --sign "$SIGN_IDENTITY" "$binary_path"
+}
+
 # Build proj
 wget -O proj.tar.gz "https://download.osgeo.org/proj/proj-$PROJ_VERSION.tar.gz"
 mkdir -p $SRC_DIR/proj
@@ -180,7 +186,7 @@ for binary in "${binaries_to_check[@]}"; do
                 ln -sf "$base_name" "$INSTALL_DIR/lib/$symlink_name"
             fi
         done
-        codesign --force --sign - "$binary_path"
+        sign_binary "$binary_path"
     fi
 done
 
@@ -196,7 +202,7 @@ for icu_lib in "${icu_libs[@]}"; do
     otool -L "$INSTALL_DIR/lib/$icu_lib" | awk '{print $1}' | grep "@loader_path" | while read dep; do
         install_name_tool -change "$dep" "@loader_path/../lib/$(basename "$dep")" "$INSTALL_DIR/lib/$icu_lib"
     done
-    codesign --force --sign - "$INSTALL_DIR/lib/$icu_lib"
+    sign_binary "$INSTALL_DIR/lib/$icu_lib"
 done
 
 # Update library paths within each .dylib in the lib directory
@@ -216,13 +222,13 @@ for dylib in $INSTALL_DIR/lib/*.dylib; do
         fi
     done
     # Re-sign the library after modifying paths
-    codesign --force --sign - "$dylib"
+    sign_binary "$dylib"
 done
 
 # Package the build
 cd $INSTALL_DIR
 cp -Rf $(git rev-parse --show-toplevel)/share/postgresql/extension/* share/extension
-tar -cJvf $TRG_DIR/postgres-macos.txz \
+zip -r $TRG_DIR/postgres-macos.zip \
     share \
     lib \
     bin/initdb \
@@ -233,3 +239,9 @@ tar -cJvf $TRG_DIR/postgres-macos.txz \
     bin/pg_restore \
     bin/pg_isready \
     bin/psql
+
+# Notarize the zip package
+xcrun notarytool submit $TRG_DIR/postgres-macos.zip --apple-id "$APPLE_ID" --password "$APPLE_APP_SPECIFIC_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
+
+# Staple the notarization ticket to the zip file
+xcrun stapler staple $TRG_DIR/postgres-macos.zip
