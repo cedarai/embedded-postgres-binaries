@@ -232,11 +232,11 @@ for lib_file in $INSTALL_DIR/lib/*.{dylib,so}; do
     fi
 done
 
-# Package the build
+# **Step 2: Create a Zip Archive for Notarization**
 cd $INSTALL_DIR
 rm -f lib/pgxs/src/test/regress/pg_regress
 cp -Rf $(git rev-parse --show-toplevel)/share/postgresql/extension/* share/extension
-zip -r $TRG_DIR/postgres-macos.zip \
+zip -r $TRG_DIR/postgres-macos-notarize.zip \
     share \
     lib \
     bin/initdb \
@@ -283,17 +283,45 @@ sign_and_notarize() {
         exit 1
     fi
 
+    # **Step 4: Staple the Notarization Ticket**
+
     # Staple the notarization
     echo "Stapling the notarization to $package_path..."
-    xcrun stapler staple "$package_path"
+    # Staple executables
+    for exe in "${binaries_to_check[@]}"; do
+        if [[ -f "$exe" ]]; then
+            echo "Stapling $exe..."
+            xcrun stapler staple "$exe"
+            xcrun stapler validate "$exe"
+        else
+            echo "Warning: Executable $exe not found!"
+        fi
+    done
 
-    if [ $? != 0 ]; then
-        echo "ERROR: could not staple $package_path"
-        exit 1
-    fi
-
-    echo "Notarization completed successfully for $package_path"
+    # Staple dynamic libraries
+    find lib -type f \( -name "*.dylib" -o -name "*.so" -o -name "*.bundle" \) | while read -r dylib; do
+        echo "Stapling $dylib..."
+        xcrun stapler staple "$dylib"
+        xcrun stapler validate "$dylib"
+    done
 }
 
-# Sign and notarize the zip package
-sign_and_notarize "$TRG_DIR/postgres-macos.zip"
+# **Step 3: Notarize the Zip Archive**
+notarize_and_staple "$TRG_DIR/postgres-macos-notarize.zip"
+
+# **Step 5: Repackage the Stapled Files**
+
+echo "Creating final zip archive for distribution..."
+zip -r "$TRG_DIR/postgres-macos.zip" \
+  share \
+  lib \
+  bin/initdb \
+  bin/pg_ctl \
+  bin/postgres \
+  bin/pg_dump \
+  bin/pg_dumpall \
+  bin/pg_restore \
+  bin/pg_isready \
+  bin/psql
+
+echo "Final packaged build is at $TRG_DIR/postgres-macos.zip"
