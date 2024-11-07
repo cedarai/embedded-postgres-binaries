@@ -249,7 +249,7 @@ zip -r $TRG_DIR/postgres-macos-notarize.zip \
     bin/psql
 
 # Function to sign, notarize, and staple
-sign_and_notarize() {
+notarize_and_staple() {
     local package_path="$1"
 
     # Unlock the keychain
