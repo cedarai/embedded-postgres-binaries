@@ -12,6 +12,7 @@ ext {
     pgBinVersionParam = project.findProperty('pgBinVersion') ?: "${pgVersionParam}-1"
     postgisVersionParam = project.findProperty('postgisVersion') ?: ''
     pgroutingVersionParam = project.findProperty('pgroutingVersion') ?: ''
+    pgvectorVersionParam = project.findProperty('pgvectorVersion') ?: ''
     archNameParam = project.findProperty('archName') ?: ''
     distNameParam = project.findProperty('distName') ?: ''
     dockerImageParam = project.findProperty('dockerImage') ?: ''
@@ -195,12 +196,14 @@ project(':debian-platforms') {
                 inputs.property('pgVersion', pgVersionParam)
                 inputs.property('archName', platform.arch)
                 inputs.property('dockerImage', dockerImage)
+                inputs.property('pgvectorVersion', pgvectorVersionParam)
 
                 inputs.file("$rootDir/scripts/build-postgres-debian.sh")
                 outputs.dir("$temporaryDir/bundle")
 
                 workingDir temporaryDir
-                commandLine 'sh', "$rootDir/scripts/build-postgres-debian.sh", '-v', "$pgVersionParam", '-i', dockerImage, '-o', qemuBindings
+                def dockerOpts = { "${qemuBindings()} -e PGVECTOR_VERSION=${pgvectorVersionParam}" }
+                commandLine 'sh', "$rootDir/scripts/build-postgres-debian.sh", '-v', "$pgVersionParam", '-i', dockerImage, '-o', dockerOpts
             }
 
             task "${platform.arch}DebianJar"(group: "build (${platform.arch})", type: Jar) {
@@ -217,6 +220,7 @@ project(':debian-platforms') {
                 inputs.property('pgVersion', pgVersionParam)
                 inputs.property('archName', platform.arch)
                 inputs.property('dockerImage', dockerImage)
+                inputs.property('pgvectorVersion', pgvectorVersionParam)
 
                 inputs.file("$rootDir/scripts/test-postgres-linux.sh")
 
@@ -316,12 +320,14 @@ project(':custom-debian-platform') {
             inputs.property('dockerImage', dockerImage)
             inputs.property('postgisVersion', postgisVersionParam)
             inputs.property('pgroutingVersion', pgroutingVersionParam)
+            inputs.property('pgvectorVersion', pgvectorVersionParam)
 
             inputs.file("$rootDir/scripts/build-postgres-debian.sh")
             outputs.dir("$temporaryDir/bundle")
 
             workingDir temporaryDir
-            commandLine 'sh', "$rootDir/scripts/build-postgres-debian.sh", '-v', "$pgVersionParam", '-i', dockerImage, '-g', postgisVersionParam, '-r', pgroutingVersionParam, '-o', qemuBindings
+            def dockerOpts = { "${qemuBindings()} -e PGVECTOR_VERSION=${pgvectorVersionParam}" }
+            commandLine 'sh', "$rootDir/scripts/build-postgres-debian.sh", '-v', "$pgVersionParam", '-i', dockerImage, '-g', postgisVersionParam, '-r', pgroutingVersionParam, '-o', dockerOpts
         }
 
         task customDebianJar(group: 'build (custom)', type: Jar) {

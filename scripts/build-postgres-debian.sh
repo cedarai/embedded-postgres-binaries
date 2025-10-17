@@ -6,15 +6,17 @@ PROJ_VERSION=8.2.1
 GEOS_VERSION=3.8.3
 GDAL_VERSION=3.4.3
 POSTGIS_VERSION=
+PGVECTOR_VERSION=
 PGROUTING_VERSION=
 LITE_OPT=false
 
-while getopts "v:i:g:r:o:l" opt; do
+while getopts "v:i:g:r:o:s:l" opt; do
     case $opt in
     v) PG_VERSION=$OPTARG ;;
     i) IMG_NAME=$OPTARG ;;
     g) POSTGIS_VERSION=$OPTARG ;;
     r) PGROUTING_VERSION=$OPTARG ;;
+    s) PGVECTOR_VERSION=$OPTARG ;;
     o) DOCKER_OPTS=$OPTARG ;;
     l) LITE_OPT=true ;;
     \?) exit 1 ;;
@@ -52,6 +54,7 @@ $DOCKER_OPTS $IMG_NAME /bin/bash -ex -c 'echo "Starting building postgres binari
     && apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates \
         wget \
+        curl \
         rsync \
         bzip2 \
         xz-utils \
@@ -156,12 +159,24 @@ $DOCKER_OPTS $IMG_NAME /bin/bash -ex -c 'echo "Starting building postgres binari
           && make install \
     ; fi \
     \
+    && if [ -n "$PGVECTOR_VERSION" ]; then \
+      echo "Building pgvector v$PGVECTOR_VERSION" \
+      && mkdir -p /usr/src/pgvector \
+      && curl -sL "https://github.com/pgvector/pgvector/archive/refs/tags/v$PGVECTOR_VERSION.tar.gz" | tar -xzf - -C /usr/src \
+      && mv /usr/src/pgvector-* /usr/src/pgvector \
+      && cd /usr/src/pgvector \
+      && make USE_PGXS=1 PG_CONFIG=/usr/local/pg-build/bin/pg_config \
+      && make USE_PGXS=1 PG_CONFIG=/usr/local/pg-build/bin/pg_config install \
+    ; fi \
+    \
     && cd /usr/local/pg-build \
-    && cp /usr/lib/libossp-uuid.so.16 ./lib || cp /usr/lib/*/libossp-uuid.so.16 ./lib \
-    && cp /lib/*/libz.so.1 /lib/*/liblzma.so.5 /usr/lib/*/libxml2.so.2 /usr/lib/*/libxslt.so.1 ./lib \
-    && cp /lib/*/libssl.so.1* /lib/*/libcrypto.so.1* ./lib || cp /usr/lib/*/libssl.so.1* /usr/lib/*/libcrypto.so.1* ./lib \
-    && if [ "$ICU_ENABLED" = true ]; then cp --no-dereference /usr/lib/*/libicudata.so* /usr/lib/*/libicuuc.so* /usr/lib/*/libicui18n.so* ./lib; fi \
-    && if [ -n "$POSTGIS_VERSION" ]; then cp --no-dereference /lib/*/libjson-c.so* /usr/lib/*/libsqlite3.so* ./lib ; fi \
+    && mkdir -p /usr/local/pg-build/lib /usr/local/pg-build/lib/postgresql \
+    && cp /usr/lib/libossp-uuid.so.16 /usr/local/pg-build/lib || cp /usr/lib/*/libossp-uuid.so.16 /usr/local/pg-build/lib \
+    && cp /lib/*/libz.so.1 /lib/*/liblzma.so.5 /usr/lib/*/libxml2.so.2 /usr/lib/*/libxslt.so.1 /usr/local/pg-build/lib \
+    && cp /usr/lib/*/libssl.so.* /usr/lib/*/libcrypto.so.* /usr/local/pg-build/lib || cp /lib/*/libssl.so.* /lib/*/libcrypto.so.* /usr/local/pg-build/lib || true \
+    && if [ "$ICU_ENABLED" = true ]; then cp --no-dereference /usr/lib/*/libicudata.so* /usr/lib/*/libicuuc.so* /usr/lib/*/libicui18n.so* /usr/local/pg-build/lib; fi \
+    && if [ -n "$POSTGIS_VERSION" ]; then cp --no-dereference /lib/*/libjson-c.so* /usr/lib/*/libsqlite3.so* /usr/local/pg-build/lib ; fi \
+    && cd /usr/local/pg-build \
     && find ./bin -type f \( -name "initdb" -o -name "pg_ctl" -o -name "postgres" -o -name "pg_dump" -o -name "pg_dumpall" -o -name "pg_restore" -o -name "pg_isready" -o -name "psql" \) -print0 | xargs -0 -n1 patchelf --set-rpath "\$ORIGIN/../lib" \
     && find ./lib -maxdepth 1 -type f -name "*.so*" -print0 | xargs -0 -n1 patchelf --set-rpath "\$ORIGIN" \
     && find ./lib/postgresql -maxdepth 1 -type f -name "*.so*" -print0 | xargs -0 -n1 patchelf --set-rpath "\$ORIGIN/.." \
