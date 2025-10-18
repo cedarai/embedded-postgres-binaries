@@ -6,15 +6,17 @@ PROJ_VERSION=8.2.1
 GEOS_VERSION=3.8.3
 GDAL_VERSION=3.4.3
 POSTGIS_VERSION=
+PGVECTOR_VERSION=
 PGROUTING_VERSION=
 LITE_OPT=false
 
 # Parse options
-while getopts "v:g:r:l" opt; do
+while getopts "v:g:r:s:l" opt; do
     case $opt in
     v) PG_VERSION=$OPTARG ;;
     g) POSTGIS_VERSION=$OPTARG ;;
     r) PGROUTING_VERSION=$OPTARG ;;
+    s) PGVECTOR_VERSION=$OPTARG ;;
     l) LITE_OPT=true ;;
     \?) exit 1 ;;
     esac
@@ -26,6 +28,9 @@ fi
 if echo "$PG_VERSION" | grep -q '^9\.' && [ "$LITE_OPT" = true ] ; then
   echo "Lite option is supported only for PostgreSQL 10 or later!" && exit 1;
 fi
+
+# build everything for mac os for Sequoia >= 15.4 so dependencies all build below
+export MACOSX_DEPLOYMENT_TARGET=15.4
 
 ICU_ENABLED=$(echo "$PG_VERSION" | grep -qv '^9\.' && [ "$LITE_OPT" != true ] && echo true || echo false)
 
@@ -41,9 +46,9 @@ brew install python3 || true
 brew install pkg-config icu4c libxml2 libxslt json-c openssl@3 zlib perl patchelf curl cmake pcre boost gettext
 
 # Dynamically set environment variables for Homebrew dependencies using brew --prefix
-export PATH="$(brew --prefix icu4c)/bin:$(brew --prefix icu4c)/sbin:$(brew --prefix python3)/bin:$(brew --prefix pcre)/bin:$(brew --prefix gettext)/bin:$PATH"
-export LDFLAGS="-L$(brew --prefix icu4c)/lib -L$(brew --prefix openssl@3)/lib -L$(brew --prefix pcre)/lib -L$(brew --prefix boost)/lib -L$(brew --prefix gettext)/lib -L$INSTALL_DIR/lib"
-export CPPFLAGS="-I$(brew --prefix icu4c)/include -I$(brew --prefix openssl@3)/include -I$(brew --prefix pcre)/include -I$(brew --prefix boost)/include -I$(brew --prefix gettext)/include -I$INSTALL_DIR/include"
+export PATH="$(brew --prefix cmake)/bin:$(brew --prefix icu4c)/bin:$(brew --prefix icu4c)/sbin:$(brew --prefix python3)/bin:$(brew --prefix pcre)/bin:$(brew --prefix gettext)/bin:$PATH"
+export LDFLAGS="-L$(brew --prefix icu4c)/lib -L$(brew --prefix openssl@3)/lib -L$(brew --prefix pcre)/lib -L$(brew --prefix boost)/lib -L$(brew --prefix gettext)/lib -L$(brew --prefix libpng)/lib -L$INSTALL_DIR/lib"
+export CPPFLAGS="-I$(brew --prefix icu4c)/include -I$(brew --prefix openssl@3)/include -I$(brew --prefix pcre)/include -I$(brew --prefix boost)/include -I$(brew --prefix gettext)/include -I$(brew --prefix libpng)/include -I$INSTALL_DIR/include"
 export PKG_CONFIG_PATH="$(brew --prefix icu4c)/lib/pkgconfig:$(brew --prefix openssl@3)/lib/pkgconfig:$INSTALL_DIR/lib/pkgconfig"
 
 # Set Python path dynamically
@@ -144,6 +149,17 @@ if [ -n "$POSTGIS_VERSION" ]; then
     make install
 fi
 
+# Build pgvector (v$PGVECTOR_VERSION) if requested
+if [ -n "$PGVECTOR_VERSION" ]; then
+    echo "Building pgvector v$PGVECTOR_VERSION"
+    wget -O pgvector.tar.gz "https://github.com/pgvector/pgvector/archive/refs/tags/v$PGVECTOR_VERSION.tar.gz"
+    mkdir -p $SRC_DIR/pgvector
+    tar -xf pgvector.tar.gz -C $SRC_DIR/pgvector --strip-components 1
+    cd $SRC_DIR/pgvector
+    make USE_PGXS=1 PG_CONFIG=$INSTALL_DIR/bin/pg_config
+    make USE_PGXS=1 PG_CONFIG=$INSTALL_DIR/bin/pg_config install
+fi
+
 # Build pgRouting if specified
 if [ -n "$PGROUTING_VERSION" ]; then
     wget -O pgrouting.tar.gz "https://github.com/pgRouting/pgrouting/archive/v$PGROUTING_VERSION.tar.gz"
@@ -152,7 +168,7 @@ if [ -n "$PGROUTING_VERSION" ]; then
     cd $SRC_DIR/pgrouting
     mkdir -p build
     cd build
-    cmake -DWITH_DOC=OFF -DCMAKE_INSTALL_PREFIX=$INSTALL_DIR ..
+    cmake -DWITH_DOC=OFF -DCMAKE_INSTALL_PREFIX=$INSTALL_DIR -DCMAKE_POLICY_VERSION_MINIMUM=3.5 ..
     make -j$(sysctl -n hw.ncpu)
     make install
 fi
@@ -192,19 +208,16 @@ for binary in "${binaries_to_check[@]}"; do
     fi
 done
 
-# Copy ICU dependencies and update paths
-icu_libs=("libicudata.76.dylib" "libicuuc.76.dylib" "libicui18n.76.dylib")
-
-for icu_lib in "${icu_libs[@]}"; do
-    # Copy each ICU library to the bundle's lib directory
-    cp -Lf "$(brew --prefix icu4c)/lib/$icu_lib" "$INSTALL_DIR/lib/"
-
-    # Adjust internal paths to use @loader_path
-    install_name_tool -id "@loader_path/../lib/$icu_lib" "$INSTALL_DIR/lib/$icu_lib"
-    otool -L "$INSTALL_DIR/lib/$icu_lib" | awk '{print $1}' | grep "@loader_path" | while read dep; do
-        install_name_tool -change "$dep" "@loader_path/../lib/$(basename "$dep")" "$INSTALL_DIR/lib/$icu_lib"
+# Copy ICU dylibs from Homebrew (any versioned variants) into the bundle lib dir
+icu_dir="$(brew --prefix icu4c)/lib"
+mkdir -p "$INSTALL_DIR/lib"
+for base in libicudata libicuuc libicui18n; do
+    for f in "${icu_dir}/${base}".*.dylib; do
+        [ -e "$f" ] || continue
+        cp -Lf "$f" "$INSTALL_DIR/lib/"
+        install_name_tool -id "@loader_path/../lib/$(basename "$f")" "$INSTALL_DIR/lib/$(basename "$f")" || true
+        sign_binary "$INSTALL_DIR/lib/$(basename "$f")"
     done
-    sign_binary "$INSTALL_DIR/lib/$icu_lib"
 done
 
 # Function to recursively copy dependencies and update paths

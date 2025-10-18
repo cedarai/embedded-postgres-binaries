@@ -13,13 +13,16 @@ on:
 env:
   POSTGIS_VERSION: 3.4.4
   PGROUTING_VERSION: 3.6.2
+  PGVECTOR_VERSION: 0.8.0
 
 jobs:
-  build-and-release-macos:
+  build-macos:
     strategy:
       matrix:
         pg_version: ["16.6"]
-        os: [macos-15-large, macos-15-xlarge]
+        os:
+          - macos-15-large
+          - macos-15-xlarge
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -27,23 +30,23 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-      
+
       - name: Decode and import the certificate
         run: |
           # Decode the base64-encoded certificate and save it as a .p12 file
           echo "${{ secrets.CERTIFICATE_P12_BASE64 }}" | base64 --decode > certificate.p12
-          
+
           # Import the .p12 certificate into the macOS keychain
           security create-keychain -p "temp-password" build.keychain
           security import certificate.p12 -k build.keychain -P "${{ secrets.CERTIFICATE_PASSWORD }}" -T /usr/bin/codesign
-          
+
           # Set the keychain as default and unlock it
           security list-keychains -s build.keychain
           security unlock-keychain -p "temp-password" build.keychain
-          
+
           # Set keychain settings to prevent it from locking automatically
           security set-keychain-settings build.keychain
-          
+
           # Pre-authorize codesign to access the certificate
           security set-key-partition-list -S apple-tool:,apple: -s -k "temp-password" build.keychain
 
@@ -52,10 +55,10 @@ jobs:
           echo "APPLE_APP_SPECIFIC_PASSWORD=${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}" >> $GITHUB_ENV
           echo "APPLE_TEAM_ID=${{ secrets.APPLE_TEAM_ID }}" >> $GITHUB_ENV
 
-      - name: Build PostgreSQL, PostGIS, and Dependencies
+      - name: Build PostgreSQL, PostGIS, pgvector, and dependencies
         id: build_postgres
         run: |
-          ./build-postgres-darwin.sh -v ${{ matrix.pg_version }} -g $POSTGIS_VERSION -r $PGROUTING_VERSION
+          ./build-postgres-darwin.sh -v ${{ matrix.pg_version }} -g $POSTGIS_VERSION -r $PGROUTING_VERSION -s $PGVECTOR_VERSION
           if [ "${{ matrix.os }}" == "macos-15-xlarge" ]; then
             echo "ARCH=arm64" >> $GITHUB_OUTPUT
             echo "FILENAME=postgresql-${{ matrix.pg_version }}-darwin-arm64.zip" >> $GITHUB_OUTPUT
@@ -68,63 +71,78 @@ jobs:
         run: |
           mkdir -p release
           cp bundle/postgres-macos.zip "release/${{ steps.build_postgres.outputs.FILENAME }}"
+          ls -l release
 
-      - name: Calculate SHA256 Checksums
-        id: calculate_sha256
-        run: |
-          cd release
-          echo "SHA256SUMS=$(shasum -a 256 ${{ steps.build_postgres.outputs.FILENAME }} | awk '{print $1}')" >> $GITHUB_OUTPUT
-
-      - name: Get date
-        id: get_date
-        run: |
-          echo "DATE=$(date +%Y%m%d)" >> $GITHUB_OUTPUT
-
-      - name: Delete Existing Release
-        if: always()
-        run: |
-          tag="v${{ matrix.pg_version }}-macos-${{ steps.build_postgres.outputs.ARCH }}-${{ steps.get_date.outputs.DATE }}"
-          release_id=$(gh release view "$tag" --json id -q '.id' 2>/dev/null || echo "")
-          if [[ -n "$release_id" ]]; then
-            gh release delete "$tag" -y
-          fi
-        env:
-          GH_TOKEN: ${{ github.token }}
-
-      - name: Create GitHub Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
         with:
-          tag_name: "v${{ matrix.pg_version }}-macos-${{ steps.build_postgres.outputs.ARCH }}-${{ steps.get_date.outputs.DATE }}"
-          release_name: "${{ matrix.pg_version }}-macos-${{ steps.build_postgres.outputs.ARCH }}-${{ steps.get_date.outputs.DATE }}"
-          draft: false
-          prerelease: false
-          body: |
-            SHA256 Checksums:
-            ```
-            ${{ steps.calculate_sha256.outputs.SHA256SUMS }}
-            ```
+          if-no-files-found: error
+          name: postgresql-macos-${{ steps.build_postgres.outputs.ARCH }}
+          path: ${{ github.workspace }}/scripts/release/${{ steps.build_postgres.outputs.FILENAME }}
 
-      - name: Upload Release Asset
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: scripts/release/${{ steps.build_postgres.outputs.FILENAME }}
-          asset_name: ${{ steps.build_postgres.outputs.FILENAME }}
-          asset_content_type: application/x-tar
+  build-linux:
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            runs_on: ubuntu-22.04
+            pg_version: "16.6"
+          - arch: arm64v8
+            runs_on: ubuntu-22.04-arm
+            pg_version: "16.6"
 
-  build-and-release-linux:
-    runs-on: ubuntu-22.04
+    runs-on: ${{ matrix.runs_on }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Build PostgreSQL, PostGIS, and Dependencies
+      - name: Build PostgreSQL, PostGIS, pgvector, and dependencies
         run: |
-          ./build_and_release.sh
+          ARCH_NAME=${{ matrix.arch }} PG_VERSION=${{ matrix.pg_version }} ./build_and_release.sh
         env:
           GH_TOKEN: ${{ github.token }}
+
+      - name: Upload Linux artifact
+        uses: actions/upload-artifact@v4
+        with:
+          if-no-files-found: error
+          name: postgresql-linux-${{ matrix.pg_version }}-${{ matrix.arch }}
+          path: release/postgresql-${{ matrix.pg_version }}-linux-${{ matrix.arch }}.txz
+
+  publish-release:
+    name: Publish combined release
+    needs: [ build-linux]
+    strategy:
+      matrix:
+        pg_version: ["16.6"]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release
+
+      - name: List downloaded artifacts
+        run: |
+          find release -type f -maxdepth 2 -print
+
+      - name: Create unified GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${{ matrix.pg_version }}"
+          DATE=$(date +%Y%m%d)
+          RELEASE_NAME="${VERSION}-${DATE}"
+          # Flatten nested artifact directories into release/
+          mkdir -p out
+          find release -type f \( -name "postgresql-${{ matrix.pg_version }}-*.zip" -o -name "postgresql-${{ matrix.pg_version }}-*.txz" \) -exec cp {} out/ \;
+          # Generate SHA256 sums
+          (cd out && sha256sum *) > out/SHA256SUMS.txt || true
+          echo "Assets to upload:" && ls -l out
+          # Remove existing release if present
+          gh release view "$RELEASE_NAME" >/dev/null 2>&1 && gh release delete "$RELEASE_NAME" -y || true
+          # Create release with all assets
+          gh release create "$RELEASE_NAME" out/* --title "$RELEASE_NAME" --notes-file out/SHA256SUMS.txt

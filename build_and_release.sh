@@ -3,27 +3,22 @@
 set -e
 
 rm -rf release
-mkdir release
+mkdir -p release
 
 function do_build {
     version="$1"
     echo "=== Building ${version} ==="
     echo
 
-    ./gradlew clean install -Pversion="${version}.0" -PpgVersion="${version}" -ParchName=amd64 -PpostgisVersion=$POSTGIS_VERSION -PpgroutingVersion=$PGROUTING_VERSION
-    cp custom-debian-platform/build/tmp/buildCustomDebianBundle/bundle/postgres-linux-debian.txz "release/postgresql-${version}-linux-amd64.txz"
+    ARCH_NAME=${ARCH_NAME:-amd64}
+    ./gradlew clean install -Pversion="${version}.0" -PpgVersion="${version}" -ParchName=${ARCH_NAME} -PpostgisVersion=$POSTGIS_VERSION -PpgroutingVersion=$PGROUTING_VERSION -PpgvectorVersion=0.8.0
+    cp custom-debian-platform/build/tmp/buildCustomDebianBundle/bundle/postgres-linux-debian.txz "release/postgresql-${version}-linux-${ARCH_NAME}.txz"
 }
 
-function do_release {
-    version="$1"
-    release_name="${version}-with-tools-$(date "+%Y%m%d")"
-    sums=$(echo "sha256 sums:" && cd release && sha256sum postgresql-${version}-*)
-    yes | gh release delete "${release_name}" || true
-    gh release create "${release_name}" --notes "${sums}" --title "" release/postgresql-${version}-*
-}
+# Note: Release publishing is handled by the GitHub Actions workflow.
+# This script now only builds and stages artifacts under ./release
 
-versions=("16.6")
+versions=("${PG_VERSION:-16.6}")
 for version in "${versions[@]}"; do
     do_build "$version"
-    do_release "$version"
 done

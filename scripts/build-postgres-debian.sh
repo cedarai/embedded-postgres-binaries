@@ -6,15 +6,17 @@ PROJ_VERSION=8.2.1
 GEOS_VERSION=3.8.3
 GDAL_VERSION=3.4.3
 POSTGIS_VERSION=
+PGVECTOR_VERSION=
 PGROUTING_VERSION=
 LITE_OPT=false
 
-while getopts "v:i:g:r:o:l" opt; do
+while getopts "v:i:g:r:o:s:l" opt; do
     case $opt in
     v) PG_VERSION=$OPTARG ;;
     i) IMG_NAME=$OPTARG ;;
     g) POSTGIS_VERSION=$OPTARG ;;
     r) PGROUTING_VERSION=$OPTARG ;;
+    s) PGVECTOR_VERSION=$OPTARG ;;
     o) DOCKER_OPTS=$OPTARG ;;
     l) LITE_OPT=true ;;
     \?) exit 1 ;;
@@ -52,6 +54,7 @@ $DOCKER_OPTS $IMG_NAME /bin/bash -ex -c 'echo "Starting building postgres binari
     && apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates \
         wget \
+        curl \
         rsync \
         bzip2 \
         xz-utils \
@@ -152,16 +155,27 @@ $DOCKER_OPTS $IMG_NAME /bin/bash -ex -c 'echo "Starting building postgres binari
           && curl -sL "https://github.com/pgRouting/pgrouting/archive/v$PGROUTING_VERSION.tar.gz" | tar -xzf - -C /usr/src/pgrouting --strip-components 1 \
           && cd /usr/src/pgrouting && mkdir build && cd build \
           && cmake -DWITH_DOC=OFF -DCMAKE_INSTALL_PREFIX=/usr/local/pg-build .. \
-          && make \
+          && make -j$(nproc) \
           && make install \
     ; fi \
     \
+    && if [ -n "$PGVECTOR_VERSION" ]; then \
+      echo "Building pgvector v$PGVECTOR_VERSION" \
+      && rm -rf /usr/src/pgvector \
+      && mkdir -p /usr/src/pgvector \
+      && curl -sL "https://github.com/pgvector/pgvector/archive/refs/tags/v$PGVECTOR_VERSION.tar.gz" | tar -xzf - -C /usr/src/pgvector --strip-components 1 \
+      && cd /usr/src/pgvector \
+      && make USE_PGXS=1 PG_CONFIG=/usr/local/pg-build/bin/pg_config \
+      && make USE_PGXS=1 PG_CONFIG=/usr/local/pg-build/bin/pg_config install \
+    ; fi \
+    \
     && cd /usr/local/pg-build \
-    && cp /usr/lib/libossp-uuid.so.16 ./lib || cp /usr/lib/*/libossp-uuid.so.16 ./lib \
-    && cp /lib/*/libz.so.1 /lib/*/liblzma.so.5 /usr/lib/*/libxml2.so.2 /usr/lib/*/libxslt.so.1 ./lib \
-    && cp /lib/*/libssl.so.1* /lib/*/libcrypto.so.1* ./lib || cp /usr/lib/*/libssl.so.1* /usr/lib/*/libcrypto.so.1* ./lib \
-    && if [ "$ICU_ENABLED" = true ]; then cp --no-dereference /usr/lib/*/libicudata.so* /usr/lib/*/libicuuc.so* /usr/lib/*/libicui18n.so* ./lib; fi \
-    && if [ -n "$POSTGIS_VERSION" ]; then cp --no-dereference /lib/*/libjson-c.so* /usr/lib/*/libsqlite3.so* ./lib ; fi \
+    && mkdir -p ./lib \
+    && if [ -f /usr/lib/libossp-uuid.so.16 ]; then cp /usr/lib/libossp-uuid.so.16 ./lib/; else cp /usr/lib/*/libossp-uuid.so.16 ./lib/; fi \
+    && cp /lib/*/libz.so.1 /lib/*/liblzma.so.5 /usr/lib/*/libxml2.so.2 /usr/lib/*/libxslt.so.1 ./lib/ \
+    && if ls /lib/*/libssl.so.1* /lib/*/libcrypto.so.1* >/dev/null 2>&1; then cp /lib/*/libssl.so.1* /lib/*/libcrypto.so.1* ./lib/; else cp /usr/lib/*/libssl.so.1* /usr/lib/*/libcrypto.so.1* ./lib/; fi \
+    && if [ "$ICU_ENABLED" = true ]; then cp --no-dereference /usr/lib/*/libicudata.so* /usr/lib/*/libicuuc.so* /usr/lib/*/libicui18n.so* ./lib/; fi \
+    && if [ -n "$POSTGIS_VERSION" ]; then cp --no-dereference /lib/*/libjson-c.so* /usr/lib/*/libsqlite3.so* /usr/lib/*/libtiff.so* ./lib/ ; fi \
     && find ./bin -type f \( -name "initdb" -o -name "pg_ctl" -o -name "postgres" -o -name "pg_dump" -o -name "pg_dumpall" -o -name "pg_restore" -o -name "pg_isready" -o -name "psql" \) -print0 | xargs -0 -n1 patchelf --set-rpath "\$ORIGIN/../lib" \
     && find ./lib -maxdepth 1 -type f -name "*.so*" -print0 | xargs -0 -n1 patchelf --set-rpath "\$ORIGIN" \
     && find ./lib/postgresql -maxdepth 1 -type f -name "*.so*" -print0 | xargs -0 -n1 patchelf --set-rpath "\$ORIGIN/.." \
