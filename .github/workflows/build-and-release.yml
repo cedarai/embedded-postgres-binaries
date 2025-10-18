@@ -14,7 +14,6 @@ env:
   POSTGIS_VERSION: 3.4.4
   PGROUTING_VERSION: 3.6.2
   PGVECTOR_VERSION: 0.8.0
-  PG_VERSION: "16.6"
 
 jobs:
   build-macos:
