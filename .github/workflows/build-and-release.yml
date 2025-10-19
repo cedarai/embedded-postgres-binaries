@@ -111,7 +111,7 @@ jobs:
 
   publish-release:
     name: Publish combined release
-    needs: [ build-linux]
+    needs: [ build-linux, build-macos ]
     strategy:
       matrix:
         pg_version: ["16.6"]
