@@ -85,12 +85,13 @@ jobs:
   build-linux:
     strategy:
       matrix:
+        arch: [amd64, arm64v8]
+        pg_version: ["16.8", "17.4"]
         include:
           - arch: amd64
             runs_on: ubuntu-22.04
           - arch: arm64v8
             runs_on: ubuntu-22.04-arm
-        pg_version: ["16.8", "17.4"]
 
     runs-on: ${{ matrix.runs_on }}
     steps:
