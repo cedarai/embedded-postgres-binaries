@@ -22,7 +22,7 @@ jobs:
       matrix:
         pg_version: ["16.6"]
         os:
-          - macos-14-large
+          # - macos-14-large
           - macos-14-xlarge
     runs-on: ${{ matrix.os }}
     defaults:
