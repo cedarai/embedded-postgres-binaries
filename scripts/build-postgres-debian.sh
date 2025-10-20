@@ -61,6 +61,8 @@ $DOCKER_OPTS $IMG_NAME /bin/bash -ex -c 'echo "Starting building postgres binari
         gcc \
         g++ \
         make \
+        bison \
+        flex \
         pkg-config \
         libc-dev \
         libicu-dev \
