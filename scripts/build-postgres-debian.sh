@@ -69,6 +69,7 @@ $DOCKER_OPTS $IMG_NAME /bin/bash -ex -c 'echo "Starting building postgres binari
         libossp-uuid-dev \
         libxml2-dev \
         libxslt1-dev \
+        libxml2-utils \
         libssl-dev \
         libz-dev \
         libperl-dev \
