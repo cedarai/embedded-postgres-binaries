@@ -16,12 +16,13 @@ env:
   POSTGIS_VERSION: 3.4.4
   PGROUTING_VERSION: 3.6.2
   PGVECTOR_VERSION: 0.8.0
+  PG_VERSIONS: '["16.8", "17.4"]'
 
 jobs:
   build-macos:
     strategy:
       matrix:
-        pg_version: ["17.4"]
+        pg_version: ${{ fromJson(env.PG_VERSIONS) }}
         os:
           - macos-14-large
           - macos-14-xlarge
@@ -88,10 +89,9 @@ jobs:
         include:
           - arch: amd64
             runs_on: ubuntu-22.04
-            pg_version: "17.4"
           - arch: arm64v8
             runs_on: ubuntu-22.04-arm
-            pg_version: "17.4"
+        pg_version: ${{ fromJson(env.PG_VERSIONS) }}
 
     runs-on: ${{ matrix.runs_on }}
     steps:
@@ -116,7 +116,7 @@ jobs:
     needs: [ build-linux, build-macos ]
     strategy:
       matrix:
-        pg_version: ["17.4"]
+        pg_version: ${{ fromJson(env.PG_VERSIONS) }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
