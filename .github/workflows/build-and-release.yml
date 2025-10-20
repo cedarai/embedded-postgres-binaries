@@ -9,6 +9,7 @@ on:
     branches:
       - release
       - aaron/pgvector
+      - aaron/pgvector17
   workflow_dispatch:
 
 env:
@@ -20,7 +21,7 @@ jobs:
   build-macos:
     strategy:
       matrix:
-        pg_version: ["16.8"]
+        pg_version: ["17.4"]
         os:
           - macos-14-large
           - macos-14-xlarge
@@ -87,10 +88,10 @@ jobs:
         include:
           - arch: amd64
             runs_on: ubuntu-22.04
-            pg_version: "16.8"
+            pg_version: "17.4"
           - arch: arm64v8
             runs_on: ubuntu-22.04-arm
-            pg_version: "16.8"
+            pg_version: "17.4"
 
     runs-on: ${{ matrix.runs_on }}
     steps:
@@ -115,7 +116,7 @@ jobs:
     needs: [ build-linux, build-macos ]
     strategy:
       matrix:
-        pg_version: ["16.8"]
+        pg_version: ["17.4"]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
