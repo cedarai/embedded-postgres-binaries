@@ -126,9 +126,10 @@ cd $SRC_DIR/postgresql
     --with-perl \
     --with-python \
     --with-tcl \
-    --without-readline
-make -j$(sysctl -n hw.ncpu) world
-make install-world
+    --without-readline \
+    --without-docs
+make -j$(sysctl -n hw.ncpu) world-bin
+make install-world-bin
 
 # Build PostGIS with locally built proj, geos, and gdal
 if [ -n "$POSTGIS_VERSION" ]; then
