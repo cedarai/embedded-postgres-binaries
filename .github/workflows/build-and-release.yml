@@ -20,9 +20,9 @@ jobs:
   build-macos:
     strategy:
       matrix:
-        pg_version: ["16.6"]
+        pg_version: ["16.8"]
         os:
-          # - macos-14-large
+          - macos-14-large
           - macos-14-xlarge
     runs-on: ${{ matrix.os }}
     defaults:
@@ -60,7 +60,7 @@ jobs:
         id: build_postgres
         run: |
           ./build-postgres-darwin.sh -v ${{ matrix.pg_version }} -g $POSTGIS_VERSION -r $PGROUTING_VERSION -s $PGVECTOR_VERSION
-          if [ "${{ matrix.os }}" == "macos-15-xlarge" ]; then
+          if [ "${{ matrix.os }}" == "macos-14-xlarge" ]; then
             echo "ARCH=arm64" >> $GITHUB_OUTPUT
             echo "FILENAME=postgresql-${{ matrix.pg_version }}-darwin-arm64.zip" >> $GITHUB_OUTPUT
           else
@@ -87,10 +87,10 @@ jobs:
         include:
           - arch: amd64
             runs_on: ubuntu-22.04
-            pg_version: "16.6"
+            pg_version: "16.8"
           - arch: arm64v8
             runs_on: ubuntu-22.04-arm
-            pg_version: "16.6"
+            pg_version: "16.8"
 
     runs-on: ${{ matrix.runs_on }}
     steps:
@@ -115,7 +115,7 @@ jobs:
     needs: [ build-linux, build-macos ]
     strategy:
       matrix:
-        pg_version: ["16.6"]
+        pg_version: ["16.8"]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
