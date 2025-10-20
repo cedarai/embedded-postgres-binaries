@@ -8,6 +8,7 @@ on:
   push:
     branches:
       - release
+      - aaron/pgvector
   workflow_dispatch:
 
 env:
@@ -21,7 +22,7 @@ jobs:
       matrix:
         pg_version: ["16.6"]
         os:
-          - macos-15-large
+          # - macos-15-large
           - macos-15-xlarge
     runs-on: ${{ matrix.os }}
     defaults:

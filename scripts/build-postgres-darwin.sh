@@ -29,9 +29,6 @@ if echo "$PG_VERSION" | grep -q '^9\.' && [ "$LITE_OPT" = true ] ; then
   echo "Lite option is supported only for PostgreSQL 10 or later!" && exit 1;
 fi
 
-# build everything for mac os for Sequoia >= 15.4 so dependencies all build below
-export MACOSX_DEPLOYMENT_TARGET=15.4
-
 ICU_ENABLED=$(echo "$PG_VERSION" | grep -qv '^9\.' && [ "$LITE_OPT" != true ] && echo true || echo false)
 
 # Directories
