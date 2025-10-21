@@ -29,6 +29,8 @@ if echo "$PG_VERSION" | grep -q '^9\.' && [ "$LITE_OPT" = true ] ; then
   echo "Lite option is supported only for PostgreSQL 10 or later!" && exit 1;
 fi
 
+export MACOSX_DEPLOYMENT_TARGET="$(sw_vers -productVersion)"
+
 ICU_ENABLED=$(echo "$PG_VERSION" | grep -qv '^9\.' && [ "$LITE_OPT" != true ] && echo true || echo false)
 
 # Directories
@@ -124,9 +126,10 @@ cd $SRC_DIR/postgresql
     --with-perl \
     --with-python \
     --with-tcl \
-    --without-readline
-make -j$(sysctl -n hw.ncpu) world
-make install-world
+    --without-readline \
+    --without-docs
+make -j$(sysctl -n hw.ncpu) world-bin
+make install-world-bin
 
 # Build PostGIS with locally built proj, geos, and gdal
 if [ -n "$POSTGIS_VERSION" ]; then

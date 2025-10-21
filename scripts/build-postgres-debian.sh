@@ -61,12 +61,15 @@ $DOCKER_OPTS $IMG_NAME /bin/bash -ex -c 'echo "Starting building postgres binari
         gcc \
         g++ \
         make \
+        bison \
+        flex \
         pkg-config \
         libc-dev \
         libicu-dev \
         libossp-uuid-dev \
         libxml2-dev \
         libxslt1-dev \
+        libxml2-utils \
         libssl-dev \
         libz-dev \
         libperl-dev \
@@ -104,8 +107,9 @@ $DOCKER_OPTS $IMG_NAME /bin/bash -ex -c 'echo "Starting building postgres binari
         --with-python \
         --with-tcl \
         --without-readline \
-    && make -j$(nproc) world \
-    && make install-world \
+        --without-docs \
+    && make -j$(nproc) world-bin \
+    && make install-world-bin \
     && make -C contrib install \
     \
     && if [ -n "$POSTGIS_VERSION" ]; then \

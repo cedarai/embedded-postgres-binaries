@@ -8,7 +8,6 @@ on:
   push:
     branches:
       - release
-      - aaron/pgvector
   workflow_dispatch:
 
 env:
@@ -20,10 +19,10 @@ jobs:
   build-macos:
     strategy:
       matrix:
-        pg_version: ["16.6"]
+        pg_version: ["16.9", "17.4"]
         os:
-          # - macos-15-large
-          - macos-15-xlarge
+          - macos-14-large
+          - macos-14-xlarge
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -60,13 +59,10 @@ jobs:
         id: build_postgres
         run: |
           ./build-postgres-darwin.sh -v ${{ matrix.pg_version }} -g $POSTGIS_VERSION -r $PGROUTING_VERSION -s $PGVECTOR_VERSION
-          if [ "${{ matrix.os }}" == "macos-15-xlarge" ]; then
-            echo "ARCH=arm64" >> $GITHUB_OUTPUT
-            echo "FILENAME=postgresql-${{ matrix.pg_version }}-darwin-arm64.zip" >> $GITHUB_OUTPUT
-          else
-            echo "ARCH=amd64" >> $GITHUB_OUTPUT
-            echo "FILENAME=postgresql-${{ matrix.pg_version }}-darwin-amd64.zip" >> $GITHUB_OUTPUT
-          fi
+
+          ARCH=$(arch)
+          echo "ARCH=$ARCH" >> $GITHUB_OUTPUT
+          echo "FILENAME=postgresql-${{ matrix.pg_version }}-darwin-$ARCH.zip" >> $GITHUB_OUTPUT
 
       - name: Prepare Release Assets
         run: |
@@ -78,19 +74,19 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           if-no-files-found: error
-          name: postgresql-macos-${{ steps.build_postgres.outputs.ARCH }}
+          name: postgresql-macos-${{ matrix.pg_version }}-${{ steps.build_postgres.outputs.ARCH }}
           path: ${{ github.workspace }}/scripts/release/${{ steps.build_postgres.outputs.FILENAME }}
 
   build-linux:
     strategy:
       matrix:
+        arch: [amd64, arm64v8]
+        pg_version: ["16.9", "17.4"]
         include:
           - arch: amd64
             runs_on: ubuntu-22.04
-            pg_version: "16.6"
           - arch: arm64v8
             runs_on: ubuntu-22.04-arm
-            pg_version: "16.6"
 
     runs-on: ${{ matrix.runs_on }}
     steps:
@@ -115,7 +111,7 @@ jobs:
     needs: [ build-linux, build-macos ]
     strategy:
       matrix:
-        pg_version: ["16.6"]
+        pg_version: ["16.9", "17.4"]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
