@@ -62,7 +62,8 @@ jobs:
         run: |
           ./build-postgres-darwin.sh -v ${{ matrix.pg_version }} -g $POSTGIS_VERSION -r $PGROUTING_VERSION -s $PGVECTOR_VERSION
 
-          echo "ARCH=$(arch)" >> $GITHUB_OUTPUT
+          ARCH=$(arch)
+          echo "ARCH=$ARCH" >> $GITHUB_OUTPUT
           echo "FILENAME=postgresql-${{ matrix.pg_version }}-darwin-$ARCH.zip" >> $GITHUB_OUTPUT
 
       - name: Prepare Release Assets
